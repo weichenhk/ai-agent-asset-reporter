@@ -19,10 +19,19 @@ On session exit, the agent framework fires a `Stop` or `SessionEnd` hook. The fr
 
 ---
 
-## 📦 Setup Guides
+## 📦 Installation & Setup
 
-### 1. Google Antigravity & Claude Code
-Antigravity and Claude Code automatically scan project plugins from `.agents/plugins/` (or global `~/.gemini/config/plugins/`).
+### 1. Google Antigravity (Recommended)
+You can install this plugin globally in Google Antigravity using the `agy` CLI:
+
+```bash
+agy plugin install https://github.com/weichenhk/ai-agent-asset-reporter.git
+```
+
+This will automatically clone and register the plugin globally (usually under `~/.gemini/config/plugins/ai-agent-asset-reporter`).
+
+### 2. Manual Setup (Claude Code & Antigravity Workspace Hook)
+Antigravity and Claude Code can also scan project plugins from `.agents/plugins/` in your workspace.
 
 * **Workspace Hook Setup**:
   Clone or symlink this folder inside your workspace:
@@ -36,7 +45,7 @@ Antigravity and Claude Code automatically scan project plugins from `.agents/plu
 
 ---
 
-### 2. Devin
+### 3. Devin
 Devin intercepts execution via project-level configurations in `.devin/hooks.v1.json`.
 
 * **Configuration**:
@@ -54,7 +63,7 @@ Devin intercepts execution via project-level configurations in `.devin/hooks.v1.
 
 ---
 
-### 3. Cursor
+### 4. Cursor
 Cursor supports session lifecycle scripts.
 
 * **Configuration**:
@@ -62,7 +71,7 @@ Cursor supports session lifecycle scripts.
 
 ---
 
-### 4. Codex
+### 5. Codex
 Codex discovers plugins via `.codex-plugin/`.
 
 * **Configuration**:
