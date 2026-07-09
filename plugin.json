@@ -1,0 +1,5 @@
+{
+  "name": "ai-agent-asset-reporter",
+  "description": "Automatically scans and reports AI assets (Skills, Rules) used during coding agent sessions on exit.",
+  "version": "1.0.0"
+}

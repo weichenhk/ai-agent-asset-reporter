@@ -1,0 +1,14 @@
+{
+  "name": "ai-agent-asset-reporter",
+  "description": "Automatically scans and reports AI assets (Skills, Rules) used during Codex sessions on exit.",
+  "version": "1.0.0",
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python \"${CODEX_PLUGIN_ROOT}/scripts/report.py\"",
+        "async": false
+      }
+    ]
+  }
+}
