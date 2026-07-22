@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import re
+import glob
 from datetime import datetime
 
 # 确保在 Windows 控制台等 GBK 终端下，能够正常输出 UTF-8 编码字符（如 Emoji 和中文）
@@ -16,8 +17,7 @@ def normalize_path(p):
     """统一路径格式，用于路径匹配比对"""
     if not p:
         return ""
-    # 去除首尾引号
-    p = p.strip('"\'')
+    p = str(p).strip('"\'')
     try:
         return os.path.abspath(p).replace('\\', '/').lower()
     except Exception:
@@ -32,6 +32,58 @@ def get_real_path(p):
         return os.path.realpath(p).replace('\\', '/').lower()
     except Exception:
         return normalize_path(p)
+
+
+def parse_code_workspace(workspace_paths):
+    """
+    检查并解析 *.code-workspace (多根目录配置文件)。
+    返回 (code_workspace_host_dir, expanded_workspace_paths)
+    """
+    host_dir = None
+    expanded_paths = list(workspace_paths)
+    
+    dirs_to_check = list(workspace_paths)
+    # 也检查传入工作区路径的父目录（兼容从子仓启动 IDE 但父仓有 code-workspace 的情况）
+    for ws in workspace_paths:
+        if os.path.isdir(ws):
+            parent = os.path.dirname(os.path.abspath(ws))
+            if parent and parent not in dirs_to_check:
+                dirs_to_check.append(parent)
+
+    for check_dir in dirs_to_check:
+        if os.path.isfile(check_dir) and check_dir.endswith('.code-workspace'):
+            cw_file = check_dir
+            h_dir = os.path.dirname(os.path.abspath(cw_file))
+        elif os.path.isdir(check_dir):
+            cw_files = glob.glob(os.path.join(check_dir, '*.code-workspace'))
+            if cw_files:
+                cw_file = cw_files[0]
+                h_dir = os.path.abspath(check_dir)
+            else:
+                continue
+        else:
+            continue
+
+        # 找到有效的 code-workspace 文件
+        try:
+            with open(cw_file, 'r', encoding='utf-8') as f:
+                # 去除可能的 JSON 注释 (//)
+                content = re.sub(r'//.*', '', f.read())
+                data = json.loads(content)
+                folders = data.get('folders') or []
+                for item in folders:
+                    sub_path = item.get('path')
+                    if sub_path:
+                        # 相对路径转为基于 code-workspace 所在目录的绝对路径
+                        abs_sub = os.path.abspath(os.path.join(h_dir, sub_path))
+                        if os.path.exists(abs_sub) and abs_sub not in expanded_paths:
+                            expanded_paths.append(abs_sub)
+                host_dir = h_dir
+                break
+        except Exception:
+            pass
+
+    return host_dir, list(dict.fromkeys(expanded_paths))
 
 
 def load_payload():
@@ -93,7 +145,7 @@ def load_payload():
     return payload
 
 
-def scan_assets(workspace_paths):
+def scan_assets(expanded_paths):
     """扫描所有工作区及常用目录下的技能 (Skills) 和规则 (Rules)"""
     skills = {} # skill_key -> { "name": str, "dir": str, "real_dir": str, "skill_md": str, "real_skill_md": str }
     rules = {}  # rule_key  -> { "name": str, "path": str, "real_path": str }
@@ -103,8 +155,7 @@ def scan_assets(workspace_paths):
     # 常用 rules 目录名称
     rules_dir_names = ['.agents/rules', '_agents/rules', 'rules', '.devin/rules']
     
-    # 扫描路径列表
-    paths_to_scan = list(workspace_paths)
+    paths_to_scan = list(expanded_paths)
     
     # 扫描全局配置目录
     global_dirs = [
@@ -113,7 +164,7 @@ def scan_assets(workspace_paths):
         os.path.expanduser('~/.devin')
     ]
     for g_dir in global_dirs:
-        if os.path.exists(g_dir):
+        if os.path.exists(g_dir) and g_dir not in paths_to_scan:
             paths_to_scan.append(g_dir)
             
     for base_path in paths_to_scan:
@@ -193,12 +244,11 @@ def scan_assets(workspace_paths):
 
 def match_file_to_asset(norm_file, real_file, skills, rules):
     """校验指定被访问的文件路径是否命中某个 Skill 或 Rule"""
-    # 1. 匹配 Skill：允许命中 SKILL.md，或者命中技能目录下的任意支撑文件 (references/*.md, scripts/*)
+    # 1. 匹配 Skill：允许命中 SKILL.md，或者命中技能目录下的任意支撑文件
     for skill_key, s_info in skills.items():
         s_dir = s_info['dir']
         s_real_dir = s_info['real_dir']
         
-        # 判断文件路径是否位于技能目录下 (按前缀判断)
         if norm_file.startswith(s_dir + '/') or norm_file == s_dir:
             return 'skill', skill_key
         if s_real_dir and (real_file.startswith(s_real_dir + '/') or real_file == s_real_dir):
@@ -248,16 +298,13 @@ def analyze_transcript(transcript_path, skills, rules):
                 # 2. 检查 content 中的规则标签或路径硬引用
                 content = step.get('content') or ""
                 if content:
-                    # 扫描是否有包含规则标签的内容，如 <RULE[unittest.md]> 或 <RULE[AGENTS.md]>
                     rule_matches = re.findall(r'<RULE\[([^\]]+)\]>', content)
                     for rule_tag in rule_matches:
                         tag_lower = rule_tag.lower()
-                        # 精确或包含规则名匹配
                         for r_key in rules:
                             if r_key == tag_lower or r_key.startswith(tag_lower) or tag_lower.startswith(r_key):
                                 used_rules[r_key] = used_rules.get(r_key, 0) + 1
 
-                    # 扫描 content 中出现的绝对路径字符串
                     for raw_word in re.findall(r'[a-zA-Z]:[\\/][^\s"\':<>]+', content):
                         norm_word = normalize_path(raw_word)
                         real_word = get_real_path(raw_word)
@@ -267,7 +314,7 @@ def analyze_transcript(transcript_path, skills, rules):
                         elif asset_type == 'rule':
                             used_rules[key] = used_rules.get(key, 0) + 1
 
-    except Exception as e:
+    except Exception:
         pass
         
     return used_skills, used_rules
@@ -350,12 +397,15 @@ def find_latest_agent_transcript():
 def main():
     payload = load_payload()
     
-    workspace_paths = payload.get('workspacePaths') or []
+    raw_workspace_paths = payload.get('workspacePaths') or []
     transcript_path = payload.get('transcriptPath')
     
-    # 容错：如果在参数里没收到 transcript 路径，自动在 workspace 中搜搜
-    if not transcript_path and workspace_paths:
-        for ws in workspace_paths:
+    # 1. 检查并解析 *.code-workspace 多根目录文件
+    cw_host_dir, expanded_paths = parse_code_workspace(raw_workspace_paths)
+    
+    # 容错：如果在参数里没收到 transcript 路径，自动在各工作区中寻找
+    if not transcript_path and expanded_paths:
+        for ws in expanded_paths:
             possible_paths = [
                 os.path.join(ws, '.system_generated', 'logs', 'transcript.jsonl'),
                 os.path.join(ws, '.claude', 'logs', 'transcript.jsonl'),
@@ -372,32 +422,31 @@ def main():
     if not transcript_path:
         transcript_path = find_latest_agent_transcript()
             
-    # 1. 扫描所有已定义 Skills 和 Rules
-    skills, rules = scan_assets(workspace_paths)
+    # 2. 扫描所有关联子仓已定义 Skills 和 Rules
+    skills, rules = scan_assets(expanded_paths)
     
-    # 2. 分析交互日志计算资产命中情况
+    # 3. 分析交互日志计算资产命中情况
     used_skills, used_rules = analyze_transcript(transcript_path, skills, rules)
     
-    # 3. 生成报告内容
+    # 4. 生成报告内容
     report_content = generate_report(skills, rules, used_skills, used_rules)
     
-    # 4. 输出 Markdown 报告到控制台
+    # 5. 输出 Markdown 报告到控制台 (stdout)
     print(report_content)
     
-    # 5. 自动保存报告到所有活跃工作区本地文件 (支持多根目录 Suite 工作区)
-    if workspace_paths:
-        for ws in workspace_paths:
-            if os.path.exists(ws) and os.path.isdir(ws):
-                report_dir = os.path.join(ws, '.agents', 'reports')
-                try:
-                    os.makedirs(report_dir, exist_ok=True)
-                    report_file = os.path.join(report_dir, 'session_asset_report.md')
-                    with open(report_file, 'w', encoding='utf-8') as f:
-                        f.write(report_content)
-                    print(f"ℹ️ 报告已保存至工作区: file:///{report_file.replace('\\', '/')}")
-                except Exception as e:
-                    print(f"⚠️ 无法保存报告到工作区 [{ws}]: {e}")
-        print()
+    # 6. 确定报告唯一的输出目录（遵循：优先存放在 code-workspace 宿主根目录，其次主工作区）
+    target_workspace = cw_host_dir or (raw_workspace_paths[0] if raw_workspace_paths else None)
+    
+    if target_workspace and os.path.exists(target_workspace) and os.path.isdir(target_workspace):
+        report_dir = os.path.join(target_workspace, '.agents', 'reports')
+        try:
+            os.makedirs(report_dir, exist_ok=True)
+            report_file = os.path.join(report_dir, 'session_asset_report.md')
+            with open(report_file, 'w', encoding='utf-8') as f:
+                f.write(report_content)
+            print(f"ℹ️ 报告已成功落盘至宿主工作区: file:///{report_file.replace('\\', '/')}\n")
+        except Exception as e:
+            print(f"⚠️ 无法保存报告到工作区 [{target_workspace}]: {e}\n")
 
 
 if __name__ == '__main__':
