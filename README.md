@@ -16,6 +16,7 @@ On session exit, the agent framework fires a `Stop` or `SessionEnd` hook. The fr
 2. Parses the session transaction logs (`transcript.jsonl` or other platform logs).
 3. Matches file access logs (e.g. `view_file` or `read_file` calls) against indexed assets.
 4. Outputs a summary Markdown report directly to your terminal.
+5. Automatically persists the report to `<workspace>/.agents/reports/session_asset_report.md` for convenient preview in your IDE.
 
 ---
 
@@ -84,6 +85,12 @@ You can also run the audit manually against any saved transcript log:
 ```bash
 python scripts/report.py --workspace /path/to/project --transcript /path/to/transcript.jsonl
 ```
+
+---
+
+## 📊 Report Outputs
+- **Terminal output**: Prints a clean Markdown summary to `stdout` upon session termination.
+- **File persistence**: Automatically writes the report to `<your-project-root>/.agents/reports/session_asset_report.md`. This allows you to check and preview the report anytime from within your IDE.
 
 ---
 
