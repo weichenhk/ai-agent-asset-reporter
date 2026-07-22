@@ -2,7 +2,7 @@
   "Stop": [
     {
       "type": "command",
-      "command": "python .agents/plugins/session-asset-reporter/scripts/report.py"
+      "command": "python scripts/report.py"
     }
   ]
 }

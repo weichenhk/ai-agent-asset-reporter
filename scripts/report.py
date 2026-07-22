@@ -365,14 +365,47 @@ def generate_report(skills, rules, used_skills, used_rules):
     return "\n".join(lines)
 
 
+def resolve_plugin_root():
+    """解析插件根目录：优先从多平台环境变量读取，其次以脚本自身所在物理路径退避"""
+    env_vars = [
+        'ANTIGRAVITY_PLUGIN_ROOT',
+        'GEMINI_PLUGIN_ROOT',
+        'CLAUDE_PLUGIN_ROOT',
+        'CODEX_PLUGIN_ROOT',
+        'CURSOR_PLUGIN_ROOT',
+        'DEVIN_PLUGIN_ROOT'
+    ]
+    for var in env_vars:
+        val = os.environ.get(var)
+        if val and os.path.exists(val):
+            return val
+
+    # 退避：通过当前脚本文件的真实绝对路径向上推导插件根目录
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        plugin_root = os.path.dirname(script_dir)
+        if os.path.exists(plugin_root):
+            return plugin_root
+    except Exception:
+        pass
+
+    return os.getcwd()
+
+
 def find_latest_agent_transcript():
+
     """尝试在全局 Agent 脑区目录下寻找最近修改的会话日志"""
     candidates = [
         os.path.expanduser('~/.gemini/antigravity-ide/brain'),
         os.path.expanduser('~/.gemini/brain'),
         os.path.expanduser('~/.antigravity/brain'),
-        os.path.expanduser('~/.claude/logs')
+        os.path.expanduser('~/.claude/logs'),
+        os.path.expanduser('~/.codex/logs'),
+        os.path.expanduser('~/.codex/brain'),
+        os.path.expanduser('~/.devin/logs'),
+        os.path.expanduser('~/.cursor/logs')
     ]
+
     
     latest_transcript = None
     latest_mtime = 0

@@ -6,7 +6,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "python \"${CODEX_PLUGIN_ROOT}/scripts/report.py\"",
+        "command": "python scripts/report.py",
         "async": false
       }
     ]
