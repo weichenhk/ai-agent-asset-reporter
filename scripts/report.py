@@ -384,19 +384,20 @@ def main():
     # 4. 输出 Markdown 报告到控制台
     print(report_content)
     
-    # 5. 自动保存报告到主工作区本地文件
+    # 5. 自动保存报告到所有活跃工作区本地文件 (支持多根目录 Suite 工作区)
     if workspace_paths:
-        main_workspace = workspace_paths[0]
-        if os.path.exists(main_workspace) and os.path.isdir(main_workspace):
-            report_dir = os.path.join(main_workspace, '.agents', 'reports')
-            try:
-                os.makedirs(report_dir, exist_ok=True)
-                report_file = os.path.join(report_dir, 'session_asset_report.md')
-                with open(report_file, 'w', encoding='utf-8') as f:
-                    f.write(report_content)
-                print(f"ℹ️ 报告已成功保存到本地文件: file:///{report_file.replace('\\', '/')}\n")
-            except Exception as e:
-                print(f"⚠️ 无法保存报告到本地文件: {e}\n")
+        for ws in workspace_paths:
+            if os.path.exists(ws) and os.path.isdir(ws):
+                report_dir = os.path.join(ws, '.agents', 'reports')
+                try:
+                    os.makedirs(report_dir, exist_ok=True)
+                    report_file = os.path.join(report_dir, 'session_asset_report.md')
+                    with open(report_file, 'w', encoding='utf-8') as f:
+                        f.write(report_content)
+                    print(f"ℹ️ 报告已保存至工作区: file:///{report_file.replace('\\', '/')}")
+                except Exception as e:
+                    print(f"⚠️ 无法保存报告到工作区 [{ws}]: {e}")
+        print()
 
 
 if __name__ == '__main__':
